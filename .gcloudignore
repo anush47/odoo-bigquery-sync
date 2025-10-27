@@ -1,0 +1,41 @@
+# This file specifies files that are *not* uploaded to Google Cloud
+# using gcloud. It follows the same syntax as .gitignore, with the addition of
+# "#!include" directives (which insert the entries of the given .gitignore-style
+# file at that point).
+
+# Default gcloud ignore patterns
+.gcloudignore
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+
+# Local development
+key.json
+*.log
+
+# State files (we use GCS in cloud)
+sync_state*.json
+
+# Documentation (not needed in container)
+*.md
+DEPLOY.md
+QUICKSTART.md
+README.md
+
+# Scripts (not needed in container)
+deploy.sh
+
+# Do NOT ignore these (override defaults):
+!.env
+!requirements.txt
+!main.py
+!Dockerfile
