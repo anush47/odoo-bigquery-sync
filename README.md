@@ -2,6 +2,20 @@
 
 Automatically sync Odoo records to BigQuery using Cloud Run Jobs.
 
+## What is This?
+
+This is a serverless ETL pipeline that extracts data from Odoo (an open-source ERP system) and loads it into Google BigQuery for analytics and reporting. It runs as a Cloud Run Job, making it cost-effective and scalable - you only pay when it's actively syncing data.
+
+The system handles the complexities of Odoo's data model (arrays, objects, boolean quirks) and automatically converts records into BigQuery-compatible format. It supports both one-time historical syncs and ongoing incremental syncs.
+
+### Common Use Cases
+
+- **Business Intelligence**: Sync sales orders, customers, invoices to BigQuery for dashboarding in Looker/Data Studio
+- **Data Warehousing**: Archive Odoo data for long-term analysis and compliance
+- **Cross-System Integration**: Combine Odoo data with other sources (CRM, marketing tools) in BigQuery
+- **Backup & Recovery**: Create read-only copies of critical Odoo data outside the operational system
+- **Performance Optimization**: Move heavy analytical queries from Odoo to BigQuery
+
 ## Features
 
 - **Flexible Sync Modes**: Full historical sync or incremental by days
@@ -75,9 +89,37 @@ This will:
 - Push to Container Registry (`gcr.io`)
 - Deploy as Cloud Run Job in `australia-southeast1`
 
-### 3. Run Manually
+### 3. Set Environment Variables
 
-Execute the job once:
+**Important:** In Cloud Run, set environment variables directly in the job (not in .env):
+
+```bash
+gcloud run jobs update odoo-bq-sync \
+  --region=australia-southeast1 \
+  --set-env-vars="ENVIRONMENT=cloud,\
+ODOO_URL=https://your-odoo-instance.com,\
+ODOO_DB=your-database,\
+ODOO_USERNAME=admin,\
+ODOO_PASSWORD=your-password,\
+ODOO_MODEL=sale.order,\
+BQ_TABLE_ID=project.dataset.table,\
+BATCH_LIMIT=1000,\
+BUFFER_MINUTES=2,\
+LOOKBACK_DAYS=-1,\
+DELETE_SYNCED_RECORDS=false,\
+GCS_BUCKET=your-bucket,\
+STATE_FILE=sync_state.json" \
+  --project=arvautomation
+```
+
+Or set them in Cloud Console:
+1. Go to Cloud Run → Jobs → odoo-bq-sync
+2. Click "Edit"
+3. Add variables in "Variables & Secrets" tab
+
+### 4. Create BigQuery Table
+
+First run will detect missing table and print CREATE TABLE SQL:
 
 ```bash
 gcloud run jobs execute odoo-bq-sync \
@@ -85,7 +127,19 @@ gcloud run jobs execute odoo-bq-sync \
   --project=arvautomation
 ```
 
-### 4. View Logs
+Check logs for the one-line SQL, copy it, and run in BigQuery console.
+
+### 5. Run Sync
+
+After table is created, run again to sync data:
+
+```bash
+gcloud run jobs execute odoo-bq-sync \
+  --region=australia-southeast1 \
+  --project=arvautomation
+```
+
+### 6. View Logs
 
 ```bash
 gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=odoo-bq-sync" \
@@ -120,16 +174,22 @@ For local testing:
 
 ## How It Works
 
-1. **Checks** BigQuery table exists and is accessible
+1. **Checks** BigQuery table exists (if not, generates CREATE TABLE SQL and exits)
 2. **Fetches existing IDs** from BigQuery to avoid duplicates
 3. **Determines date range** based on `LOOKBACK_DAYS` (-1 for all records)
 4. **Fetches records in batches** from Odoo (ordered by create_date ascending)
 5. **Filters out duplicates** by comparing with existing IDs
-6. **Sanitizes** arrays and objects to JSON strings for BigQuery compatibility
+6. **Sanitizes** data:
+   - Arrays/objects → JSON strings
+   - Booleans → strings ("true"/"false")
+   - Empty strings → NULL
 7. **Inserts** records to BigQuery with insertId for deduplication
-8. **Optionally deletes** synced records from Odoo (if `DELETE_SYNCED_RECORDS=true`)
+8. **Handles errors gracefully**:
+   - Failed records are logged with details
+   - Successful records continue processing
+   - Only successful records are deleted from Odoo (if enabled)
 9. **Processes** up to 100 batches per run (100k records at default batch size)
-10. **Prints summary** with total fetched, inserted, skipped, and deleted counts
+10. **Prints summary** with totals: fetched, inserted, failed, skipped, deleted
 
 ### Lookback Period
 
