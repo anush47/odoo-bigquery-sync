@@ -5,9 +5,16 @@ from datetime import datetime, timedelta, UTC
 from google.cloud import bigquery, storage
 from dotenv import load_dotenv
 
-# Always load .env
-if os.path.exists(".env"):
-    load_dotenv()
+# Load .env only if ENVIRONMENT is not already set (local mode)
+# In Cloud Run, environment variables are set directly, so .env is not needed
+if "ENVIRONMENT" not in os.environ:
+    # Local mode - load from .env file
+    if os.path.exists(".env"):
+        load_dotenv()
+        print("📝 Loaded configuration from .env file")
+else:
+    # Cloud mode - environment variables already set by Cloud Run
+    print("☁️ Using Cloud Run environment variables")
 
 # In cloud mode, remove GOOGLE_APPLICATION_CREDENTIALS to use service account
 if os.environ.get("ENVIRONMENT", "local") == "cloud":
@@ -29,27 +36,6 @@ ENVIRONMENT = os.environ.get("ENVIRONMENT", "local")
 GCS_BUCKET = os.environ.get("GCS_BUCKET", None)
 # ----------------------------------------
 
-# ---------------- BIGQUERY TABLE SCHEMAS ----------------
-# Define your table schemas here. Add new models as needed.
-# Format: "model.name": {"field_name": "BQ_TYPE", ...}
-TABLE_SCHEMAS = {
-    "sale.order": {
-        "id": "INTEGER",
-        "name": "STRING",
-        "create_date": "TIMESTAMP",
-        "write_date": "TIMESTAMP",
-        "state": "STRING",
-        "partner_id": "INTEGER",
-        "amount_total": "FLOAT",
-        "amount_untaxed": "FLOAT",
-        "amount_tax": "FLOAT",
-        # Add more fields as needed
-    },
-    # Add more models here:
-    # "product.product": {...},
-    # "res.partner": {...},
-}
-# --------------------------------------------------------
 
 # --- Extract project ID from BQ_TABLE_ID ---
 BQ_PROJECT_ID = BQ_TABLE_ID.split('.')[0] if '.' in BQ_TABLE_ID else None
@@ -103,67 +89,6 @@ def get_model_fields(model):
     except Exception as e:
         print(f"❌ Error fetching fields for model {model}: {e}")
         return []
-
-def get_model_fields_with_types(model):
-    """Get fields with their Odoo types"""
-    try:
-        fields_info = models.execute_kw(DB, uid, PASSWORD, model, 'fields_get', [], {'attributes': ['string', 'type']})
-        return fields_info
-    except Exception as e:
-        print(f"❌ Error fetching fields for model {model}: {e}")
-        return {}
-
-def check_or_create_bq_table():
-    """Check if BigQuery table exists, create it if not using predefined schema"""
-    try:
-        # Parse table ID
-        parts = BQ_TABLE_ID.split('.')
-        if len(parts) != 3:
-            print(f"❌ Invalid BQ_TABLE_ID format. Expected: project.dataset.table, got: {BQ_TABLE_ID}")
-            return False
-
-        project_id, dataset_id, table_id = parts
-        table_ref = f"{project_id}.{dataset_id}.{table_id}"
-
-        # Check if table exists
-        try:
-            bq_client.get_table(table_ref)
-            print(f"✅ BigQuery table exists: {table_ref}")
-            return True
-        except Exception:
-            print(f"⚠️ Table does not exist: {table_ref}")
-
-            # Check if auto-creation is enabled
-            if not AUTO_CREATE_TABLE:
-                print(f"❌ Table does not exist and AUTO_CREATE_TABLE is disabled")
-                print(f"💡 Set AUTO_CREATE_TABLE=true in .env to enable automatic table creation")
-                print(f"💡 Or create the table manually in BigQuery")
-                return False
-
-            # Check if we have a schema defined for this model
-            if ODOO_MODEL not in TABLE_SCHEMAS:
-                print(f"❌ No schema defined for model '{ODOO_MODEL}' in TABLE_SCHEMAS")
-                print(f"💡 Add schema to TABLE_SCHEMAS dictionary in the script")
-                return False
-
-            schema_def = TABLE_SCHEMAS[ODOO_MODEL]
-            print(f"🔨 Creating table with {len(schema_def)} fields from predefined schema...")
-
-            # Create schema from predefined schema
-            schema = []
-            for field_name, bq_type in schema_def.items():
-                schema.append(bigquery.SchemaField(field_name, bq_type, mode="NULLABLE"))
-
-            # Create table
-            table = bigquery.Table(table_ref, schema=schema)
-            table = bq_client.create_table(table)
-            print(f"✅ Created table: {table.project}.{table.dataset_id}.{table.table_id}")
-            print(f"📋 Schema: {len(schema)} fields")
-            return True
-
-    except Exception as e:
-        print(f"❌ Error checking/creating BigQuery table: {e}")
-        return False
 
 # --- Fetch records ---
 def fetch_records():
