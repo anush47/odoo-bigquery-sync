@@ -40,7 +40,7 @@ ODOO_PASSWORD=your-password
 ODOO_MODEL=sale.order
 
 # BigQuery Configuration
-BQ_TABLE_ID=project_id.dataset.table_name
+BQ_TABLE_ID=your-project-id.dataset.table_name
 
 # Sync Settings
 BATCH_LIMIT=1000              # Records per batch
@@ -70,8 +70,7 @@ bash deploy.sh
 ```
 
 This creates:
-
-- Service account: `odoo-bq-sync@arvautomation.iam.gserviceaccount.com`
+- Service account: `odoo-bq-sync@your-project-id.iam.gserviceaccount.com`
 - BigQuery permissions (dataEditor, jobUser)
 - GCS bucket for state management
 
@@ -84,10 +83,9 @@ gcloud builds submit --config cloudbuild.yaml
 ```
 
 This will:
-
 - Build Docker image in the cloud (no local Docker needed)
 - Push to Container Registry (`gcr.io`)
-- Deploy as Cloud Run Job in `australia-southeast1`
+- Deploy as Cloud Run Job in your specified region
 
 ### 3. Set Environment Variables
 
@@ -95,21 +93,21 @@ This will:
 
 ```bash
 gcloud run jobs update odoo-bq-sync \
-  --region=australia-southeast1 \
+  --region=your-region \
   --set-env-vars="ENVIRONMENT=cloud,\
 ODOO_URL=https://your-odoo-instance.com,\
 ODOO_DB=your-database,\
 ODOO_USERNAME=admin,\
 ODOO_PASSWORD=your-password,\
 ODOO_MODEL=sale.order,\
-BQ_TABLE_ID=project.dataset.table,\
+BQ_TABLE_ID=your-project-id.dataset.table,\
 BATCH_LIMIT=1000,\
 BUFFER_MINUTES=2,\
 LOOKBACK_DAYS=-1,\
 DELETE_SYNCED_RECORDS=false,\
-GCS_BUCKET=your-bucket,\
+GCS_BUCKET=your-bucket-name,\
 STATE_FILE=sync_state.json" \
-  --project=arvautomation
+  --project=your-project-id
 ```
 
 Or set them in Cloud Console:
@@ -123,8 +121,8 @@ First run will detect missing table and print CREATE TABLE SQL:
 
 ```bash
 gcloud run jobs execute odoo-bq-sync \
-  --region=australia-southeast1 \
-  --project=arvautomation
+  --region=your-region \
+  --project=your-project-id
 ```
 
 Check logs for the one-line SQL, copy it, and run in BigQuery console.
@@ -135,8 +133,8 @@ After table is created, run again to sync data:
 
 ```bash
 gcloud run jobs execute odoo-bq-sync \
-  --region=australia-southeast1 \
-  --project=arvautomation
+  --region=your-region \
+  --project=your-project-id
 ```
 
 ### 6. View Logs
@@ -144,25 +142,23 @@ gcloud run jobs execute odoo-bq-sync \
 ```bash
 gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=odoo-bq-sync" \
   --limit=50 \
-  --project=arvautomation \
+  --project=your-project-id \
   --format="table(timestamp, textPayload)"
 ```
 
-Or view in console: https://console.cloud.google.com/run/jobs/details/australia-southeast1/odoo-bq-sync
+Or view in console: `https://console.cloud.google.com/run/jobs/details/your-region/odoo-bq-sync`
 
 ## Local Development
 
 For local testing:
 
 1. Update `.env`:
-
    ```bash
    ENVIRONMENT=local
    GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account-key.json
    ```
 
 2. Install dependencies:
-
    ```bash
    pip install -r requirements.txt
    ```
@@ -220,7 +216,6 @@ LOOKBACK_DAYS=-1
 DELETE_SYNCED_RECORDS=false
 BATCH_LIMIT=1000
 ```
-
 Syncs all historical records from Odoo, keeps them in Odoo.
 
 ### Incremental Daily Sync
@@ -230,7 +225,6 @@ LOOKBACK_DAYS=1
 DELETE_SYNCED_RECORDS=false
 BATCH_LIMIT=1000
 ```
-
 Syncs only yesterday's and today's records, keeps them in Odoo.
 
 ### Archive and Delete
@@ -240,7 +234,6 @@ LOOKBACK_DAYS=30
 DELETE_SYNCED_RECORDS=true
 BATCH_LIMIT=500
 ```
-
 Syncs last 30 days and deletes from Odoo after successful sync (archival mode).
 
 ### Real-time Sync (Scheduled)
@@ -250,7 +243,6 @@ LOOKBACK_DAYS=0
 DELETE_SYNCED_RECORDS=false
 BATCH_LIMIT=100
 ```
-
 When scheduled every hour, syncs only today's records. Small batch for fast execution.
 
 ## Troubleshooting
@@ -258,26 +250,23 @@ When scheduled every hour, syncs only today's records. Small batch for fast exec
 ### Build fails
 
 Check Cloud Build logs:
-
 ```bash
-gcloud builds list --limit=5 --project=arvautomation
+gcloud builds list --limit=5 --project=your-project-id
 ```
 
 ### Job execution fails
 
 Check job logs:
-
 ```bash
 gcloud run jobs executions list \
   --job=odoo-bq-sync \
-  --region=australia-southeast1 \
-  --project=arvautomation
+  --region=your-region \
+  --project=your-project-id
 ```
 
 ### Permission errors
 
 Ensure service account has:
-
 - `roles/bigquery.dataEditor`
 - `roles/bigquery.jobUser`
 - `objectAdmin` on GCS bucket
@@ -314,12 +303,12 @@ main.py
 odoo_bq_sync/
 ├── main.py              # Main sync script
 ├── requirements.txt     # Python dependencies
-├── Dockerfile          # Container definition
-├── cloudbuild.yaml     # Cloud Build configuration
-├── deploy.sh           # Setup script
-├── .env               # Environment configuration
-├── .env.example       # Environment template
-└── .gcloudignore      # Files to exclude from build
+├── Dockerfile           # Container definition
+├── cloudbuild.yaml      # Cloud Build configuration
+├── deploy.sh            # Setup script
+├── .env                 # Environment configuration
+├── .env.example         # Environment template
+└── .gcloudignore        # Files to exclude from build
 ```
 
 ## Re-deploy After Changes
